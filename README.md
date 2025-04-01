@@ -351,11 +351,11 @@ You can also use the Tools API with a framework like LangChain or LangGraph.
 
 Currently Arcade provides ease-of-use integrations for the following frameworks:
 
--   LangChain/Langgraph
+-   LangChain/LangGraph
 -   CrewAI
 -   LlamaIndex (coming soon)
 
-Here's an example of how to use the Tools API with LangChain/Langgraph:
+Here's an example of how to use the Tools API with LangChain/LangGraph:
 
 ```python
 import os
