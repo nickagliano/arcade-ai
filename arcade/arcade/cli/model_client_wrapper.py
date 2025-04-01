@@ -24,49 +24,29 @@ class ChatInteractionResult:
 
 
 class ModelClientWrapper:
-    def __init__(self, api_key: str, base_url: str = None, client_type: str = "openai"):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-3.5-turbo"):
         self.api_key = api_key
-        self.base_url = base_url or "https://api.openai.com/v1"  # Default to OpenAI if base_url is None
-        self.client_type = client_type.lower()
+        self.base_url = base_url or "https://api.arcade.dev/v1"  # Default to OpenAI if base_url is None
+        self.model = model.lower()
 
-        if self.client_type == "openai":
-            self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-        elif self.client_type == "anthropic":
-            self.client = self._create_anthropic_client()  # You could define this method
-        else:
-            raise ValueError(f"Unknown client type: {self.client_type}")
 
-    def _create_anthropic_client(self):
-        # Placeholder for creating an Anthropic client, assuming Arcade supports this abstraction
-        # You can define the logic based on how the client is supposed to be initialized
-        return "Anthropic client initialization goes here"  # Example
-
-    def chat(self, model: str, history: Optional[list] = None, user_email: Optional[str] = None, stream: bool = False):
+    def chat(self, history: Optional[list] = None, user_email: Optional[str] = None, stream: bool = False):
         # Handle chat interaction based on the client type
         if self.client_type == "openai":
             # Assuming OpenAI client has chat support
             return self.client.chat.completions.create(
-                model=model,
+                model=self.model,
                 messages=history,
                 user=user_email,
                 stream=stream
             )
         elif self.client_type == "anthropic":
             # Handle chat with Anthropic (replace with real client code)
-            return self._handle_anthropic_chat(model, history, user_email, stream)
+            return self._handle_anthropic_chat(self.model, history, user_email, stream)
 
-    def _handle_anthropic_chat(self, model: str, history: Optional[list], user_email: Optional[str], stream: bool):
-        # Implement the Anthropic-specific chat handling logic
-        # This is just a placeholder
-        return {
-            "message": "Anthropic chat response",
-            "history": history or [],
-            "tool_messages": [],
-            "tool_authorization": None
-        }
     
     def handle_chat_interaction(
-        self, model: str, history: list[dict], user_email: str | None, stream: bool = False
+        self, history: list[dict], user_email: str | None, stream: bool = False
     ) -> ChatInteractionResult:
         """
         Handle a single chat-request/chat-response interaction for both streamed and non-streamed responses.
@@ -80,13 +60,13 @@ class ModelClientWrapper:
             # TODO Fix this in the client so users don't deal with these
             # typing issues
             response = client.chat.completions.create(  # type: ignore[call-overload]
-                model=model,
+                model=self.model,
                 messages=history,
                 tool_choice="generate",
                 user=user_email,
                 stream=True,
             )
-            streaming_result = handle_streaming_content(response, model)
+            streaming_result = handle_streaming_content(response, self.model)
             role, message_content = streaming_result.role, streaming_result.full_message
             tool_messages, tool_authorization = (
                 streaming_result.tool_messages,
@@ -94,7 +74,7 @@ class ModelClientWrapper:
             )
         else:
             response = client.chat.completions.create(  # type: ignore[call-overload]
-                model=model,
+                model=self.model,
                 messages=history,
                 tool_choice="generate",
                 user=user_email,
@@ -113,7 +93,7 @@ class ModelClientWrapper:
             elif role == "assistant":
                 message_content = markdownify_urls(message_content)
                 console.print(
-                    f"\n[blue][bold]Assistant[/bold] ({model}):[/blue] ", Markdown(message_content)
+                    f"\n[blue][bold]Assistant[/bold] ({self.model}):[/blue] ", Markdown(message_content)
                 )
             else:
                 console.print(f"\n[bold]{role}:[/bold] {message_content}")
@@ -129,7 +109,6 @@ class ModelClientWrapper:
         arcade_client: Arcade,
         tool_authorization: AuthorizationResponse,
         history: list[dict[str, Any]],
-        model: str,
         user_email: str | None,
         stream: bool,
     ) -> ChatInteractionResult:
@@ -150,5 +129,5 @@ class ModelClientWrapper:
             live.update(Text(message, style="dim"))
 
         history.pop()
-        return self.handle_chat_interaction(model, history, user_email, stream)
+        return self.handle_chat_interaction(self.model, history, user_email, stream)
 

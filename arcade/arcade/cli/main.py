@@ -277,9 +277,9 @@ def chat(
             history.append({"role": "user", "content": user_input})
 
             try:
-                model_client_wrapper = ModelClientWrapper(api_key=config.api.key, base_url=base_url)
+                model_client_wrapper = ModelClientWrapper(api_key=config.api.key, base_url=base_url, model=model)
 
-                chat_result = model_client_wrapper.handle_chat_interaction(model, history, user_email, stream)
+                chat_result = model_client_wrapper.handle_chat_interaction(history, user_email, stream)
 
                 history = chat_result.history
                 tool_messages = chat_result.tool_messages
@@ -291,7 +291,6 @@ def chat(
                         client,
                         AuthorizationResponse.model_validate(tool_authorization),
                         history,
-                        model,
                         user_email,
                         stream,
                     )
