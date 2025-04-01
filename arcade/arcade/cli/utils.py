@@ -1,26 +1,23 @@
 import importlib.util
 import ipaddress
-import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Callable, Union, cast
+from typing import Callable, Union, cast
 from urllib.parse import urlencode, urlparse
 
 import idna
 import typer
 from arcadepy import NOT_GIVEN, APIConnectionError, APIStatusError, APITimeoutError, Arcade
 from arcadepy.types import AuthorizationResponse
-from openai import OpenAI, Stream
+from openai import Stream
 from openai.types.chat.chat_completion import Choice as ChatCompletionChoice
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.chat.chat_completion_chunk import Choice as ChatCompletionChunkChoice
 from rich.console import Console
-from rich.live import Live
 from rich.markdown import Markdown
-from rich.text import Text
 from typer.core import TyperGroup
 from typer.models import Context
 
@@ -224,6 +221,7 @@ class StreamingResult:
     tool_authorization: dict | None
 
 
+# TODO: Don't rely on OpenAI Stream
 def handle_streaming_content(stream: Stream[ChatCompletionChunk], model: str) -> StreamingResult:
     """
     Display the streamed markdown chunks as a single line.
@@ -334,101 +332,6 @@ def log_engine_health(client: Arcade) -> None:
             + "[/red]"
             + "[yellow])[/yellow][/bold]"
         )
-
-
-@dataclass
-class ChatInteractionResult:
-    history: list[dict]
-    tool_messages: list[dict]
-    tool_authorization: dict | None
-
-
-def handle_chat_interaction(
-    client: OpenAI, model: str, history: list[dict], user_email: str | None, stream: bool = False
-) -> ChatInteractionResult:
-    """
-    Handle a single chat-request/chat-response interaction for both streamed and non-streamed responses.
-    Handling the chat response includes:
-    - Streaming the response if the stream flag is set
-    - Displaying the response in the console
-    - Getting the tool messages and tool authorization from the response
-    - Updating the history with the response, tool calls, and tool responses
-    """
-    if stream:
-        # TODO Fix this in the client so users don't deal with these
-        # typing issues
-        response = client.chat.completions.create(  # type: ignore[call-overload]
-            model=model,
-            messages=history,
-            tool_choice="generate",
-            user=user_email,
-            stream=True,
-        )
-        streaming_result = handle_streaming_content(response, model)
-        role, message_content = streaming_result.role, streaming_result.full_message
-        tool_messages, tool_authorization = (
-            streaming_result.tool_messages,
-            streaming_result.tool_authorization,
-        )
-    else:
-        response = client.chat.completions.create(  # type: ignore[call-overload]
-            model=model,
-            messages=history,
-            tool_choice="generate",
-            user=user_email,
-            stream=False,
-        )
-        message_content = response.choices[0].message.content or ""
-
-        # Get extra fields from the response
-        tool_messages = get_tool_messages(response.choices[0])
-        tool_authorization = get_tool_authorization(response.choices[0])
-
-        role = response.choices[0].message.role
-
-        if role == "assistant" and tool_authorization:
-            pass  # Skip the message if it's an auth request (handled later in handle_tool_authorization)
-        elif role == "assistant":
-            message_content = markdownify_urls(message_content)
-            console.print(
-                f"\n[blue][bold]Assistant[/bold] ({model}):[/blue] ", Markdown(message_content)
-            )
-        else:
-            console.print(f"\n[bold]{role}:[/bold] {message_content}")
-
-    history += tool_messages
-    history.append({"role": role, "content": message_content})
-
-    return ChatInteractionResult(history, tool_messages, tool_authorization)
-
-
-def handle_tool_authorization(
-    arcade_client: Arcade,
-    tool_authorization: AuthorizationResponse,
-    history: list[dict[str, Any]],
-    openai_client: OpenAI,
-    model: str,
-    user_email: str | None,
-    stream: bool,
-) -> ChatInteractionResult:
-    with Live(console=console, refresh_per_second=4) as live:
-        if tool_authorization.url:
-            authorization_url = str(tool_authorization.url)
-            webbrowser.open(authorization_url)
-            message = (
-                "You'll need to authorize this action in your browser.\n\n"
-                f"If a browser doesn't open automatically, click [this link]({authorization_url}) "
-                f"or copy this URL and paste it into your browser:\n\n{authorization_url}"
-            )
-            live.update(Markdown(message, style="dim"))
-
-        wait_for_authorization_completion(arcade_client, tool_authorization)
-
-        message = "Thanks for authorizing the action! Sending your request..."
-        live.update(Text(message, style="dim"))
-
-    history.pop()
-    return handle_chat_interaction(openai_client, model, history, user_email, stream)
 
 
 def wait_for_authorization_completion(

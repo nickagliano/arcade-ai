@@ -10,7 +10,7 @@ import httpx
 import typer
 from arcadepy import Arcade
 from arcadepy.types import AuthorizationResponse
-from openai import OpenAI, OpenAIError
+from openai import OpenAIError
 from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
@@ -25,11 +25,12 @@ from arcade.cli.constants import (
     PROD_ENGINE_HOST,
 )
 from arcade.cli.display import (
-    display_arcade_chat_header,
-    display_eval_results,
-    display_tool_messages,
-)
+  display_arcade_chat_header,
+  display_eval_results,
+  display_tool_messages
+  )
 from arcade.cli.launcher import start_servers
+from arcade.cli.model_client_wrapper import ModelClientWrapper
 from arcade.cli.show import show_logic
 from arcade.cli.utils import (
     OrderCommands,
@@ -38,8 +39,6 @@ from arcade.cli.utils import (
     get_eval_files,
     get_today_context,
     get_user_input,
-    handle_chat_interaction,
-    handle_tool_authorization,
     handle_user_command,
     is_authorization_pending,
     load_eval_suites,
@@ -278,11 +277,9 @@ def chat(
             history.append({"role": "user", "content": user_input})
 
             try:
-                # TODO fixup configuration to remove this + "/v1" workaround
-                openai_client = OpenAI(api_key=config.api.key, base_url=base_url + "/v1")
-                chat_result = handle_chat_interaction(
-                    openai_client, model, history, user_email, stream
-                )
+                model_client_wrapper = ModelClientWrapper(api_key=config.api.key, base_url=base_url)
+
+                chat_result = model_client_wrapper.handle_chat_interaction(model, history, user_email, stream)
 
                 history = chat_result.history
                 tool_messages = chat_result.tool_messages
@@ -290,11 +287,10 @@ def chat(
 
                 # wait for tool authorizations to complete, if any
                 if tool_authorization and is_authorization_pending(tool_authorization):
-                    chat_result = handle_tool_authorization(
+                    chat_result = model_client_wrapper.handle_tool_authorization(
                         client,
                         AuthorizationResponse.model_validate(tool_authorization),
                         history,
-                        openai_client,
                         model,
                         user_email,
                         stream,
@@ -302,6 +298,7 @@ def chat(
                     history = chat_result.history
                     tool_messages = chat_result.tool_messages
 
+            # TODO: Don't use OpenAIError, use something like ArcadeChatError or ModelClientWrapperError
             except OpenAIError as e:
                 console.print(f"❌ Arcade Chat failed with error: {e!s}", style="bold red")
                 continue
